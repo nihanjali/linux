@@ -1054,16 +1054,108 @@ bool kvm_cpuid(struct kvm_vcpu *vcpu, u32 *eax, u32 *ebx,
 }
 EXPORT_SYMBOL_GPL(kvm_cpuid);
 
+
+static atomic64_t num_exits;
+EXPORT_SYMBOL(num_exits);
+
+static atomic64_t time;
+EXPORT_SYMBOL(time);
+
+static atomic64_t exit_count[69];
+EXPORT_SYMBOL(exit_count);
+
+static atomic64_t each_exit_time[69];
+EXPORT_SYMBOL(each_exit_time);
+
 int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 {
 	u32 eax, ebx, ecx, edx;
+	uint32_t i;
 
 	if (cpuid_fault_enabled(vcpu) && !kvm_require_cpl(vcpu, 0))
 		return 1;
 
 	eax = kvm_rax_read(vcpu);
 	ecx = kvm_rcx_read(vcpu);
-	kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, true);
+	if(eax== 0x4FFFFFFF){
+		printk("eax = 0x4fffffff : Total no.of exits = %lld\n",atomic64_read(&num_exits));
+		eax=atomic64_read(&num_exits);
+		ebx=0;
+		ecx=0;
+		edx=0;
+	}
+	else if(eax== 0x4ffffffe){
+		printk("eax = 0x4ffffffe : Total time = %lld\n",atomic64_read(&time));
+		ebx=(atomic64_read(&time)>>32);
+		ecx=(atomic64_read(&time) & 0xffffffff);
+		eax=0;
+		edx=0;
+	}
+	else if(eax== 0x4ffffffd){
+		if(ecx>=0 && ecx<=68 && ecx!=35 && ecx!=38 && ecx!=42 && ecx!=65 )
+		{
+			if(ecx==3 || ecx==4 ||ecx==6 ||ecx==11 ||ecx==16 ||ecx==17 ||ecx==34 ||ecx==36 ||ecx==41 ||ecx==51 ||ecx==63 ||ecx==64 ||ecx==66){
+			printk("Exit value = %d not enabled by KVM ", ecx);
+			eax=0;
+			ebx=0;
+			ecx=0;
+			edx=0;
+			}
+			else{
+			printk("eax = 0x4ffffffd : Exit count for ecx = %d is %lld\n",(int)ecx,atomic64_read(&exit_count[(int)ecx]));
+			eax=atomic64_read(&exit_count[(int)ecx]);
+			ebx=0;
+			ecx=0;
+			edx=0;
+			}
+		}
+		else{
+		printk("Exit value %d is not defined by the SDM ", ecx);
+		eax=0;
+		ebx=0;
+		ecx=0;
+		edx=0xffffffff;	
+		}
+	}
+	else if(eax== 0x4ffffffc){
+
+		if(ecx>=0 && ecx<=68 && ecx!=35 && ecx!=38 && ecx!=42 && ecx!=65 )
+		{
+
+		if(ecx==3 || ecx==4 ||ecx==6 ||ecx==11 ||ecx==16 ||ecx==17 ||ecx==34 ||ecx==36 ||ecx==41 ||ecx==51 ||ecx==63 ||ecx==64 ||ecx==66){
+		printk("exit value = %d not allowed by KVM ", ecx);
+		eax=ebx=ecx=edx=0;
+		}
+		else{
+		printk("eax = 0x4ffffffc : Exit time for ecx = %d is %lld\n",(int)ecx,atomic64_read(&each_exit_time[(int)ecx]));
+		ebx=(atomic64_read(&each_exit_time[(int)ecx])>>32);
+		ecx=(atomic64_read(&each_exit_time[(int)ecx]) & 0xffffffff);
+		eax=edx=0;
+		}
+}
+else{
+		printk("Exit value %d is not defined by the SDM ", ecx);
+		eax=0;
+		ebx=0;
+		ecx=0;
+		edx=0xffffffff;	
+		}
+
+	}
+	else if(eax == 0x4ffffffb)
+		{		
+		eax=ebx=ecx=edx=0;
+		i=0;
+		for(i=0;i<69;i++)
+		{
+			printk("Exit count for %d is %lld",i,atomic64_read(&exit_count[i]));
+		}
+		printk("Total no.of exits = %lld", atomic64_read(&num_exits));
+		printk("Assignment 4");
+	}
+	else{
+		kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, true);
+	}
 	kvm_rax_write(vcpu, eax);
 	kvm_rbx_write(vcpu, ebx);
 	kvm_rcx_write(vcpu, ecx);
